@@ -17,6 +17,8 @@ FILE 	*test_FILE, *input_FILE;
 fpos_t 	*POS;
 char 	*BUFFER;
 
+char 	CLOCK;
+
 void loadFiles(int argc, char **argv);
 void closeFiles();
 
@@ -31,12 +33,14 @@ void initTrials();
 void initTemp();
 void initInput();
 void initOutput();
+void initClock();
 
 void runNOT(char trial);
 void runAND(char trial);
 void runOR(char trial);
 void runDEC(char trial);
 void runMUX(char trial);
+void runFLOP(char trial);
 
 void runTrial(char trial);
 void printCircuit();
@@ -48,10 +52,9 @@ int main(int argc, char **argv)
 	loadFiles(argc, argv);
 	initTrials();
 	initTemp();	
-	initInput();	
+	initInput();
 	initOutput();
-	fgetpos(test_FILE,POS);
-	rewind(test_FILE);
+	initClock();
 	runCircuit();
 	closeFiles();
 	printCircuit();
@@ -73,32 +76,55 @@ void runTrial(char trial)
 		printf("ERROR: Could Not Set File Position");
 		exit(1);
 	}
-	int i;
+	char c = getVal(trial,CLOCK);
 	while(fscanf(test_FILE,"%s ",BUFFER)!=EOF)
 	{
 		if(strcmp(BUFFER,"NOT")==0)
 		{
-			runNOT(trial);			
+			if(c==0)
+			{
+				runNOT(trial);
+			}
 		}
 		else if(strcmp(BUFFER,"AND")==0)
 		{
-			runAND(trial);		
+			if(c==0)
+			{
+				runAND(trial);
+			}		
 		} 
 		else if(strcmp(BUFFER,"OR")==0)
 		{
-			runOR(trial);		
+			if(c==0)
+			{
+				runOR(trial);
+			}		
 		}
 		else if(strcmp(BUFFER,"DECODER")==0)
 		{
-			runDEC(trial);			
+			if(c==0)
+			{
+				runDEC(trial);
+			}
 		} 
 		else if(strcmp(BUFFER,"MULTIPLEXER")==0)
 		{
-			runMUX(trial);	
+			if(c==0)
+			{
+				runMUX(trial);	
+			}
 		} 
+		else if(strcmp(BUFFER,"DFLIPFLOP")==0)
+		{
+			if(c==1)
+			{
+				runFLOP(trial);
+			}
+				
+		}
 		else
 		{
-			printf("WTF!!!!!!!!!!!!!\n");
+			//printf("WTF!!!!!!(%s)\n",BUFFER);
 		} 
 		
 	}
@@ -155,16 +181,71 @@ void closeFiles()
 }
 void initTrials()
 {
-	circuit.trials = 0;
-	while(fscanf(input_FILE,"%c",BUFFER)!=EOF)
-	{
-		if(BUFFER[0]=='\n')
-		{
-			circuit.trials++;	
-		}
-	}	
+	fscanf(input_FILE,"%s ",BUFFER);
+	fscanf(input_FILE,"%d ",BUFFER);
+	circuit.trials = BUFFER[0];
 	rewind(input_FILE);
 }
+
+void initInput()
+{
+	char x,y;
+	fscanf(test_FILE, "%s ", BUFFER);
+	if(strcmp(BUFFER,"INPUTVAR")!=0)
+	{
+		printf("ERROR: Invalid Circuit Line(%s)\n", BUFFER);
+		exit(1);
+	}
+	fscanf(test_FILE, "%d ", BUFFER);
+	circuit.in = BUFFER[0];
+	circuit.input = (char**) malloc((1+circuit.trials)*sizeof(void*));
+	for(x=0;x<=circuit.trials;x++)
+	{
+		circuit.input[x] = malloc(circuit.in*sizeof(char));
+	}	
+	for(y=0;y<circuit.in;y++)
+	{
+		fscanf(test_FILE, "%c ", BUFFER);
+		circuit.input[0][y]=BUFFER[0];
+		fscanf(input_FILE, "%s ", BUFFER);
+		fscanf(input_FILE, "%d ", BUFFER);	
+		for(x=1;x<=circuit.trials;x++)
+		{
+			fscanf(input_FILE, "%d ", BUFFER);
+			circuit.input[x][y] = BUFFER[0];
+		}
+	}
+	rewind(input_FILE);
+}
+
+void initOutput()
+{
+	char x,y;
+	fscanf(test_FILE, "%s ", BUFFER);
+	if(strcmp(BUFFER, "OUTPUTVAR")!=0)
+	{
+		printf("ERROR: Invalid Circuit Line(%s)\n", BUFFER);
+		exit(1);
+	}
+	fscanf(test_FILE, "%d ", BUFFER);
+	circuit.out = BUFFER[0];
+	circuit.output = (char**) malloc((1+circuit.trials)*sizeof(void*));
+	circuit.output[0] = (char*) malloc(circuit.in);
+	for(y=0;y<circuit.out;y++)
+	{
+		fscanf(test_FILE,"%c ",BUFFER);
+		circuit.output[0][y] = BUFFER[0];
+	}	
+	for(x=1; x<=circuit.trials;x++)
+	{
+		circuit.output[x] = (char*) malloc(circuit.out);
+		for(y=0;y<circuit.out;y++)
+		{
+			circuit.output[x][y] = 0;
+		}
+	}
+}
+
 
 void initTemp()
 {
@@ -184,7 +265,33 @@ void initTemp()
 		}
 	}
 }
-	
+
+void initClock()
+{
+	fscanf(test_FILE, "%s ", BUFFER);
+	if(strcmp(BUFFER, "CLOCK")!=0)
+	{
+		printf("ERROR: Invalid Circuit Line(%s)\n", BUFFER);
+		exit(1);
+	}
+	fscanf(test_FILE, "%c ", BUFFER);
+	CLOCK = BUFFER[0];
+	fgetpos(test_FILE,POS);
+	while(fscanf(test_FILE, "%s ",BUFFER)!=EOF)
+	{
+		if(strcmp(BUFFER, "DFLIPFLOP")==0)
+		{
+			char init,var;
+			fscanf(test_FILE, "%d",BUFFER);
+			init = BUFFER[0];
+			fscanf(test_FILE, "%c %c %c %c", &BUFFER[0], &BUFFER[1], &BUFFER[2], &BUFFER[3]);
+			var = BUFFER[3];
+			setVal(1,var,init);
+		}
+	}
+	rewind(test_FILE);
+}
+
 char* getVar(char trial, char var)
 {
 	if(var>96 && var<123){	 // a is Lowercase 
@@ -235,64 +342,6 @@ void setVal(char trial, char var,char val)
 	*address = val;	
 	return;	
 }
-
-void initInput()
-{
-	char x,y;
-	fscanf(test_FILE, "%s ", BUFFER);
-	if(strcmp(BUFFER,"INPUTVAR")!=0)
-	{
-		printf("ERROR: Invalid Circuit Line(%s)\n", BUFFER);
-		exit(1);
-	}
-	fscanf(test_FILE, "%d ", BUFFER);
-	circuit.in = BUFFER[0];
-	circuit.input = (char**) malloc((1+circuit.trials)*sizeof(void*));
-	circuit.input[0] = (char*) malloc(circuit.in);
-	for(y=0;y<circuit.in;y++)
-	{
-		fscanf(test_FILE,"%c ", BUFFER);
-		circuit.input[0][y] = BUFFER[0];
-	}
-	for(x=1; x<=circuit.trials; x++)
-	{
-		circuit.input[x] = (char*) malloc(circuit.in);
-		for(y=0; y<circuit.in; y++)
-		{
-			fscanf(input_FILE, "%d ",BUFFER);
-			circuit.input[x][y] = BUFFER[0];
-		}
-	}	
-}
-
-void initOutput()
-{
-	char x,y;
-	fscanf(test_FILE, "%s ", BUFFER);
-	if(strcmp(BUFFER, "OUTPUTVAR")!=0)
-	{
-		printf("ERROR: Invalid Circuit Line(%s)\n", BUFFER);
-		exit(1);
-	}
-	fscanf(test_FILE, "%d ", BUFFER);
-	circuit.out = BUFFER[0];
-	circuit.output = (char**) malloc((1+circuit.trials)*sizeof(void*));
-	circuit.output[0] = (char*) malloc(circuit.in);
-	for(y=0;y<circuit.out;y++)
-	{
-		fscanf(test_FILE,"%c ",BUFFER);
-		circuit.output[0][y] = BUFFER[0];
-	}	
-	for(x=1; x<=circuit.trials;x++)
-	{
-		circuit.output[x] = (char*) malloc(circuit.out);
-		for(y=0;y<circuit.out;y++)
-		{
-			circuit.output[x][y] = 0;
-		}
-	}
-}
-
 
 void runNOT(char trial)
 {
@@ -363,19 +412,40 @@ void runMUX(char trial)
 	fscanf(test_FILE,"%c ",BUFFER);
 	setVal(trial,BUFFER[0], output);	
 }
+	
+void runFLOP(char trial)
+{
+	fscanf(test_FILE,"%c %c %c %c",&BUFFER[0], &BUFFER[1], &BUFFER[2], &BUFFER[3]);
+	char a = getVal(trial-1, BUFFER[1]);
+	setVal(trial,BUFFER[3],a);
+	if(trial!=circuit.trials)
+	{
+		setVal(trial+1,BUFFER[3],a);
+	}	
+}
 
 
 void printCircuit()
 {
 	char x,y;
-	for(x=1;x<=circuit.trials;x++)
+	for(y=0;y<circuit.in;y++)
 	{	
-		for(y=0;y<circuit.out;y++)
+		printf("%c: ",circuit.input[0][y]);
+		for(x=1;x<=circuit.trials;x++)
+		{
+			printf("%d ",circuit.input[x][y]);
+		}
+		printf("\n");
+	}
+	for(y=0;y<circuit.out;y++)
+	{
+		printf("%c: ",circuit.output[0][y]);
+		for(x=1;x<=circuit.trials;x++)
 		{
 			printf("%d ",circuit.output[x][y]);
 		}
 		printf("\n");
-	}
+	}	
 }
 
 
